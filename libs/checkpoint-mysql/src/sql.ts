@@ -2,6 +2,7 @@ import { type Checkpoint, TASKS } from "@langchain/langgraph-checkpoint";
 
 export interface SQL_STATEMENTS {
   SELECT_SQL: string;
+  SELECT_CHANNEL_VALUES_SQL: string;
   SELECT_PENDING_WRITES_SQL: string;
   SELECT_PENDING_SENDS_SQL: string;
   UPSERT_CHECKPOINT_BLOBS_SQL: string;
@@ -15,13 +16,17 @@ export interface SQL_STATEMENTS {
 
 export type SQL_TYPES = {
   SELECT_SQL: {
-    channel_values: [Buffer, Buffer, Buffer][];
     checkpoint: Omit<Checkpoint, "pending_sends" | "channel_values">;
     parent_checkpoint_id: string | null;
     thread_id: string;
     checkpoint_ns: string;
     checkpoint_id: string;
     metadata: Record<string, unknown>;
+  };
+  SELECT_CHANNEL_VALUES_SQL: {
+    channel: string;
+    type: string;
+    blob: Buffer;
   };
   SELECT_PENDING_WRITES_SQL: {
     task_id: string;
@@ -65,25 +70,14 @@ export const getSQLStatements = (): SQL_STATEMENTS => {
     cp.checkpoint_ns,
     cp.checkpoint_id,
     cp.parent_checkpoint_id,
-    cp.metadata,
-    (
-      SELECT JSON_ARRAYAGG(
-        JSON_ARRAY(bl.channel, bl.type, bl.\`blob\`)
-      )
-      FROM JSON_TABLE(
-        cp.checkpoint,
-        '$.channel_versions' COLUMNS (
-          channel VARCHAR(255) PATH '$.channel',
-          version VARCHAR(255) PATH '$.version'
-        )
-      ) AS jt
-      INNER JOIN ${TABLES.checkpoint_blobs} bl
-        ON bl.thread_id = cp.thread_id
-        AND bl.checkpoint_ns = cp.checkpoint_ns
-        AND bl.channel COLLATE utf8mb4_unicode_ci = jt.channel
-        AND bl.version COLLATE utf8mb4_unicode_ci = jt.version
-    ) as channel_values
+    cp.metadata
   FROM ${TABLES.checkpoints} cp `,
+
+    SELECT_CHANNEL_VALUES_SQL: `SELECT channel, type, \`blob\`
+      FROM ${TABLES.checkpoint_blobs}
+      WHERE thread_id = ? AND checkpoint_ns = ?
+        AND JSON_CONTAINS(JSON_KEYS(?), JSON_QUOTE(channel))
+        AND version = JSON_UNQUOTE(JSON_EXTRACT(?, CONCAT('$.', channel)))`,
 
     SELECT_PENDING_WRITES_SQL: `SELECT task_id, channel, type, \`blob\`
       FROM ${TABLES.checkpoint_writes}
