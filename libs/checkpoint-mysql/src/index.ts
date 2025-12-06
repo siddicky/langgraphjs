@@ -152,6 +152,25 @@ export class MysqlSaver extends BaseCheckpointSaver {
     return this.serde.loadsTyped(type, dumpedValue);
   }
 
+  protected async _loadWritesFromRows(
+    writes: SQL_TYPES["SELECT_PENDING_WRITES_SQL"][]
+  ): Promise<[string, string, unknown][]> {
+    if (!writes || writes.length === 0) {
+      return [];
+    }
+    return Promise.all(
+      writes.map(async (write) => {
+        const typeStr = write.type;
+        const valueArray = new Uint8Array(write.blob);
+        return [
+          write.task_id,
+          write.channel,
+          await this.serde.loadsTyped(typeStr, valueArray),
+        ];
+      })
+    );
+  }
+
   protected async _loadWrites(
     writes: [Buffer, Buffer, Buffer, Buffer][] | null
   ): Promise<[string, string, unknown][]> {
@@ -294,16 +313,6 @@ export class MysqlSaver extends BaseCheckpointSaver {
     ];
   }
 
-  /**
-   * Get a checkpoint tuple from the database.
-   * This method retrieves a checkpoint tuple from the MySQL database
-   * based on the provided config. If the config's configurable field contains
-   * a "checkpoint_id" key, the checkpoint with the matching thread_id and
-   * namespace is retrieved. Otherwise, the latest checkpoint for the given
-   * thread_id is retrieved.
-   * @param config The config to use for retrieving the checkpoint.
-   * @returns The retrieved checkpoint tuple, or undefined.
-   */
   // eslint-disable-next-line @typescript-eslint/naming-convention, camelcase
   async getTuple(config: RunnableConfig): Promise<CheckpointTuple | undefined> {
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -332,6 +341,14 @@ export class MysqlSaver extends BaseCheckpointSaver {
 
     const row = rows[0] as SQL_TYPES["SELECT_SQL"] | undefined;
     if (row === undefined) return undefined;
+
+    // Fetch pending writes separately
+    const [pendingWritesRows] = await this.pool.query<mysql.RowDataPacket[]>(
+      this.SQL_STATEMENTS.SELECT_PENDING_WRITES_SQL,
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      [thread_id, checkpoint_ns, row.checkpoint_id]
+    );
+    const pendingWritesData = pendingWritesRows as SQL_TYPES["SELECT_PENDING_WRITES_SQL"][];
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     if (row.checkpoint.v < 4 && row.parent_checkpoint_id != null) {
@@ -378,7 +395,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
           },
         }
       : undefined;
-    const pendingWrites = await this._loadWrites(row.pending_writes);
+    const pendingWrites = await this._loadWritesFromRows(pendingWritesData);
 
     return {
       config: finalConfig,
@@ -438,6 +455,13 @@ export class MysqlSaver extends BaseCheckpointSaver {
     }
 
     for (const value of typedRows) {
+      // Fetch pending writes for this checkpoint
+      const [pendingWritesRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        this.SQL_STATEMENTS.SELECT_PENDING_WRITES_SQL,
+        [value.thread_id, value.checkpoint_ns, value.checkpoint_id]
+      );
+      const pendingWritesData = pendingWritesRows as SQL_TYPES["SELECT_PENDING_WRITES_SQL"][];
+
       yield {
         config: {
           configurable: {
@@ -460,7 +484,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
               },
             }
           : undefined,
-        pendingWrites: await this._loadWrites(value.pending_writes),
+        pendingWrites: await this._loadWritesFromRows(pendingWritesData),
       };
     }
   }

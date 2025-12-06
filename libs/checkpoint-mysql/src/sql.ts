@@ -2,6 +2,7 @@ import { type Checkpoint, TASKS } from "@langchain/langgraph-checkpoint";
 
 export interface SQL_STATEMENTS {
   SELECT_SQL: string;
+  SELECT_PENDING_WRITES_SQL: string;
   SELECT_PENDING_SENDS_SQL: string;
   UPSERT_CHECKPOINT_BLOBS_SQL: string;
   UPSERT_CHECKPOINTS_SQL: string;
@@ -21,7 +22,12 @@ export type SQL_TYPES = {
     checkpoint_ns: string;
     checkpoint_id: string;
     metadata: Record<string, unknown>;
-    pending_writes: [Buffer, Buffer, Buffer, Buffer][];
+  };
+  SELECT_PENDING_WRITES_SQL: {
+    task_id: string;
+    channel: string;
+    type: string;
+    blob: Buffer;
   };
   SELECT_PENDING_SENDS_SQL: {
     checkpoint_id: string;
@@ -76,21 +82,13 @@ export const getSQLStatements = (): SQL_STATEMENTS => {
         AND bl.checkpoint_ns = cp.checkpoint_ns
         AND bl.channel COLLATE utf8mb4_unicode_ci = jt.channel
         AND bl.version COLLATE utf8mb4_unicode_ci = jt.version
-    ) as channel_values,
-    (
-      SELECT JSON_ARRAYAGG(
-        JSON_ARRAY(cw.task_id, cw.channel, cw.type, cw.\`blob\`)
-      )
-      FROM (
-        SELECT task_id, channel, type, \`blob\`
-        FROM ${TABLES.checkpoint_writes} cw2
-        WHERE cw2.thread_id = cp.thread_id
-          AND cw2.checkpoint_ns = cp.checkpoint_ns
-          AND cw2.checkpoint_id = cp.checkpoint_id
-        ORDER BY cw2.task_id, cw2.idx
-      ) AS cw
-    ) as pending_writes
+    ) as channel_values
   FROM ${TABLES.checkpoints} cp `,
+
+    SELECT_PENDING_WRITES_SQL: `SELECT task_id, channel, type, \`blob\`
+      FROM ${TABLES.checkpoint_writes}
+      WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?
+      ORDER BY task_id, idx`,
 
     SELECT_PENDING_SENDS_SQL: `SELECT
       checkpoint_id,
