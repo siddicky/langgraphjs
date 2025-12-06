@@ -43,14 +43,12 @@ interface TABLES {
   checkpoint_migrations: string;
 }
 
-export const getTables = (): TABLES => {
-  return {
-    checkpoints: "checkpoints",
-    checkpoint_blobs: "checkpoint_blobs",
-    checkpoint_migrations: "checkpoint_migrations",
-    checkpoint_writes: "checkpoint_writes",
-  };
-};
+export const getTables = (): TABLES => ({
+  checkpoints: "checkpoints",
+  checkpoint_blobs: "checkpoint_blobs",
+  checkpoint_migrations: "checkpoint_migrations",
+  checkpoint_writes: "checkpoint_writes",
+});
 
 export const getSQLStatements = (): SQL_STATEMENTS => {
   const TABLES = getTables();

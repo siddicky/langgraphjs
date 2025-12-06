@@ -23,6 +23,8 @@ module.exports = {
     "import/no-extraneous-dependencies": "off",
     "import/prefer-default-export": "off",
     "import/no-default-export": "error",
+    "import/no-unresolved": "off",
+    camelcase: "off",
     "class-methods-use-this": "off",
     "no-underscore-dangle": "off",
     "no-continue": "off",

@@ -146,6 +146,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
     return Object.fromEntries(entries);
   }
 
+  // eslint-disable-next-line class-methods-use-this
   protected async _loadMetadata(metadata: Record<string, unknown>) {
     const [type, dumpedValue] = await this.serde.dumpsTyped(metadata);
     return this.serde.loadsTyped(type, dumpedValue);
@@ -155,7 +156,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
     writes: [Buffer, Buffer, Buffer, Buffer][]
   ): Promise<[string, string, unknown][]> {
     return writes
-      ? await Promise.all(
+      ? Promise.all(
           writes.map(async ([tid, channel, t, v]) => [
             tid.toString("utf-8"),
             channel.toString("utf-8"),
@@ -196,6 +197,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
     );
   }
 
+  // eslint-disable-next-line class-methods-use-this
   protected _dumpCheckpoint(checkpoint: Checkpoint) {
     const serialized: Record<string, unknown> = { ...checkpoint };
     if ("channel_values" in serialized) delete serialized.channel_values;
@@ -300,22 +302,24 @@ export class MysqlSaver extends BaseCheckpointSaver {
    * @param config The config to use for retrieving the checkpoint.
    * @returns The retrieved checkpoint tuple, or undefined.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention, camelcase
   async getTuple(config: RunnableConfig): Promise<CheckpointTuple | undefined> {
-    const {
-      thread_id,
-      checkpoint_ns = "",
-      checkpoint_id,
-    } = config.configurable ?? {};
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const { thread_id, checkpoint_ns = "", checkpoint_id } =
+      config.configurable ?? {};
 
     let args: unknown[];
     let where: string;
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     if (checkpoint_id) {
       where =
         "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?";
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       args = [thread_id, checkpoint_ns, checkpoint_id];
     } else {
       where =
         "WHERE thread_id = ? AND checkpoint_ns = ? ORDER BY checkpoint_id DESC LIMIT 1";
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       args = [thread_id, checkpoint_ns];
     }
 
@@ -327,9 +331,11 @@ export class MysqlSaver extends BaseCheckpointSaver {
     const row = rows[0] as SQL_TYPES["SELECT_SQL"] | undefined;
     if (row === undefined) return undefined;
 
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     if (row.checkpoint.v < 4 && row.parent_checkpoint_id != null) {
       const [sendsRows] = await this.pool.query<mysql.RowDataPacket[]>(
         this.SQL_STATEMENTS.SELECT_PENDING_SENDS_SQL,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         [thread_id, [row.parent_checkpoint_id]]
       );
 
@@ -348,17 +354,24 @@ export class MysqlSaver extends BaseCheckpointSaver {
 
     const finalConfig = {
       configurable: {
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         thread_id,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         checkpoint_ns,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         checkpoint_id: row.checkpoint_id,
       },
     };
     const metadata = await this._loadMetadata(row.metadata);
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     const parentConfig = row.parent_checkpoint_id
       ? {
           configurable: {
+            // eslint-disable-next-line @typescript-eslint/naming-convention
             thread_id,
+            // eslint-disable-next-line @typescript-eslint/naming-convention
             checkpoint_ns,
+            // eslint-disable-next-line @typescript-eslint/naming-convention
             checkpoint_id: row.parent_checkpoint_id,
           },
         }
@@ -506,16 +519,17 @@ export class MysqlSaver extends BaseCheckpointSaver {
     if (config.configurable === undefined) {
       throw new Error(`Missing "configurable" field in "config" param`);
     }
-    const {
-      thread_id,
-      checkpoint_ns = "",
-      checkpoint_id,
-    } = config.configurable;
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const { thread_id, checkpoint_ns = "", checkpoint_id } =
+      config.configurable;
 
     const nextConfig = {
       configurable: {
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         thread_id,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         checkpoint_ns,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         checkpoint_id: checkpoint.id,
       },
     };
@@ -524,7 +538,9 @@ export class MysqlSaver extends BaseCheckpointSaver {
     try {
       await connection.beginTransaction();
       const serializedBlobs = await this._dumpBlobs(
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         thread_id,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         checkpoint_ns,
         checkpoint.channel_values,
         newVersions
@@ -536,9 +552,12 @@ export class MysqlSaver extends BaseCheckpointSaver {
         );
       }
       await connection.query(this.SQL_STATEMENTS.UPSERT_CHECKPOINTS_SQL, [
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         thread_id,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         checkpoint_ns,
         checkpoint.id,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         checkpoint_id,
         JSON.stringify(serializedCheckpoint),
         JSON.stringify(await this._dumpMetadata(metadata)),

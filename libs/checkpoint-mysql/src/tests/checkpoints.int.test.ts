@@ -265,7 +265,7 @@ describe("MysqlSaver", () => {
       configurable: { thread_id: "thread-1", checkpoint_ns: "" },
     };
 
-    const checkpoint0: Checkpoint = {
+    const checkpointZero: Checkpoint = {
       v: 1,
       id: uuid6(0),
       ts: "2024-04-19T17:19:07.952Z",
@@ -276,7 +276,7 @@ describe("MysqlSaver", () => {
 
     config = await mysqlSaver.put(
       config,
-      checkpoint0,
+      checkpointZero,
       { source: "loop", parents: {}, step: 0 },
       {}
     );
@@ -298,20 +298,20 @@ describe("MysqlSaver", () => {
     expect(tuple0?.checkpoint.channel_versions).toEqual({});
 
     // create second checkpoint
-    const checkpoint1: Checkpoint = {
+    const checkpointOne: Checkpoint = {
       v: 1,
       id: uuid6(1),
       ts: "2024-04-20T17:19:07.952Z",
       channel_values: {},
-      channel_versions: checkpoint0.channel_versions,
-      versions_seen: checkpoint0.versions_seen,
+      channel_versions: checkpointZero.channel_versions,
+      versions_seen: checkpointZero.versions_seen,
       // @ts-expect-error - older version of checkpoint
       pending_sends: [],
     };
 
     config = await mysqlSaver.put(
       config,
-      checkpoint1,
+      checkpointOne,
       { source: "loop", parents: {}, step: 1 },
       {}
     );
