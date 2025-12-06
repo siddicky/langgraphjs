@@ -1,5 +1,5 @@
 /* eslint-disable no-process-env */
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type {
   Checkpoint,
   CheckpointMetadata,
@@ -56,63 +56,32 @@ if (!TEST_MYSQL_URL) {
   throw new Error("TEST_MYSQL_URL environment variable is required");
 }
 
-let mysqlSavers: MysqlSaver[] = [];
-
-afterAll(async () => {
-  await Promise.all(mysqlSavers.map((saver) => saver.end()));
-  // clear the ended savers to clean up for the next test
-  mysqlSavers = [];
-
-  // Drop all test databases
-  const connection = await mysql.createConnection(TEST_MYSQL_URL);
-
-  try {
-    const [databases] = await connection.query<mysql.RowDataPacket[]>(
-      "SHOW DATABASES LIKE 'lg_test_db_%'"
-    );
-
-    for (const row of databases) {
-      const dbName = row[`Database (lg_test_db_%)`];
-      await connection.query(`DROP DATABASE ${dbName}`);
-      console.log(`🗑️  Dropped database: ${dbName}`);
-    }
-  } finally {
-    await connection.end();
-  }
-}, 30_000);
-
 describe("MysqlSaver", () => {
   let mysqlSaver: MysqlSaver;
-  let currentDbConnectionString: string;
 
   beforeEach(async () => {
-    const connection = await mysql.createConnection(TEST_MYSQL_URL);
-    // Generate a unique database name
-    const dbName = `lg_test_db_${Date.now()}_${Math.floor(
-      Math.random() * 1000
-    )}`;
+    mysqlSaver = MysqlSaver.fromConnString(TEST_MYSQL_URL);
+    await mysqlSaver.setup();
+  });
 
+  afterEach(async () => {
+    // Clean up tables after each test
     try {
-      // Create a new database
-      await connection.query(`CREATE DATABASE ${dbName}`);
-      console.log(`✅ Created database: ${dbName}`);
-
-      // Connect to the new database
-      const dbConnectionString = `${TEST_MYSQL_URL?.split("/")
-        .slice(0, -1)
-        .join("/")}/${dbName}`;
-      currentDbConnectionString = dbConnectionString;
-      mysqlSaver = MysqlSaver.fromConnString(dbConnectionString);
-      mysqlSavers.push(mysqlSaver);
-      await mysqlSaver.setup();
-    } finally {
+      const connection = await mysql.createConnection(TEST_MYSQL_URL);
+      await connection.query("DROP TABLE IF EXISTS checkpoint_writes");
+      await connection.query("DROP TABLE IF EXISTS checkpoint_blobs");
+      await connection.query("DROP TABLE IF EXISTS checkpoints");
+      await connection.query("DROP TABLE IF EXISTS checkpoint_migrations");
       await connection.end();
+      await mysqlSaver.end();
+    } catch (error) {
+      console.error("Cleanup error:", error);
     }
   });
 
   it("should properly initialize and setup the database", async () => {
     // Verify that the database is properly initialized
-    const connection = await mysql.createConnection(currentDbConnectionString);
+    const connection = await mysql.createConnection(TEST_MYSQL_URL);
     try {
       // Check if the required tables exist
       const [tables] = await connection.query<mysql.RowDataPacket[]>(

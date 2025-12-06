@@ -130,7 +130,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
   }
 
   protected async _loadBlobs(
-    blobValues: [Buffer, Buffer, Buffer][]
+    blobValues: [Buffer, Buffer, Buffer][] | null
   ): Promise<Record<string, unknown>> {
     if (!blobValues || blobValues.length === 0) {
       return {};
@@ -153,20 +153,22 @@ export class MysqlSaver extends BaseCheckpointSaver {
   }
 
   protected async _loadWrites(
-    writes: [Buffer, Buffer, Buffer, Buffer][]
+    writes: [Buffer, Buffer, Buffer, Buffer][] | null
   ): Promise<[string, string, unknown][]> {
-    return writes
-      ? Promise.all(
-          writes.map(async ([tid, channel, t, v]) => [
-            tid.toString("utf-8"),
-            channel.toString("utf-8"),
-            await this.serde.loadsTyped(
-              t.toString("utf-8"),
-              new Uint8Array(v)
-            ),
-          ])
-        )
-      : [];
+    if (!writes) {
+      return [];
+    }
+    return Promise.all(
+      writes.map(async ([tid, channel, t, v]) => {
+        const typeStr = t.toString("utf-8");
+        const valueArray = new Uint8Array(v);
+        return [
+          tid.toString("utf-8"),
+          channel.toString("utf-8"),
+          await this.serde.loadsTyped(typeStr, valueArray),
+        ];
+      })
+    );
   }
 
   protected async _dumpBlobs(

@@ -62,7 +62,7 @@ export const getSQLStatements = (): SQL_STATEMENTS => {
     cp.metadata,
     (
       SELECT JSON_ARRAYAGG(
-        JSON_ARRAY(bl.channel, bl.type, bl.blob)
+        JSON_ARRAY(bl.channel, bl.type, bl.\`blob\`)
       )
       FROM JSON_TABLE(
         cp.checkpoint,
@@ -74,35 +74,41 @@ export const getSQLStatements = (): SQL_STATEMENTS => {
       INNER JOIN ${TABLES.checkpoint_blobs} bl
         ON bl.thread_id = cp.thread_id
         AND bl.checkpoint_ns = cp.checkpoint_ns
-        AND bl.channel = jt.channel
-        AND bl.version = jt.version
+        AND bl.channel COLLATE utf8mb4_unicode_ci = jt.channel
+        AND bl.version COLLATE utf8mb4_unicode_ci = jt.version
     ) as channel_values,
     (
       SELECT JSON_ARRAYAGG(
-        JSON_ARRAY(cw.task_id, cw.channel, cw.type, cw.blob)
-        ORDER BY cw.task_id, cw.idx
+        JSON_ARRAY(cw.task_id, cw.channel, cw.type, cw.\`blob\`)
       )
-      FROM ${TABLES.checkpoint_writes} cw
-      WHERE cw.thread_id = cp.thread_id
-        AND cw.checkpoint_ns = cp.checkpoint_ns
-        AND cw.checkpoint_id = cp.checkpoint_id
+      FROM (
+        SELECT task_id, channel, type, \`blob\`
+        FROM ${TABLES.checkpoint_writes} cw2
+        WHERE cw2.thread_id = cp.thread_id
+          AND cw2.checkpoint_ns = cp.checkpoint_ns
+          AND cw2.checkpoint_id = cp.checkpoint_id
+        ORDER BY cw2.task_id, cw2.idx
+      ) AS cw
     ) as pending_writes
   FROM ${TABLES.checkpoints} cp `,
 
     SELECT_PENDING_SENDS_SQL: `SELECT
       checkpoint_id,
       JSON_ARRAYAGG(
-        JSON_ARRAY(cw.type, cw.blob)
-        ORDER BY cw.task_id, cw.idx
+        JSON_ARRAY(cw.type, cw.\`blob\`)
       ) as pending_sends
-    FROM ${TABLES.checkpoint_writes} cw
-    WHERE cw.thread_id = ?
-      AND cw.checkpoint_id IN (?)
-      AND cw.channel = '${TASKS}'
+    FROM (
+      SELECT checkpoint_id, type, \`blob\`
+      FROM ${TABLES.checkpoint_writes} cw2
+      WHERE cw2.thread_id = ?
+        AND cw2.checkpoint_id IN (?)
+        AND cw2.channel = '${TASKS}'
+      ORDER BY cw2.task_id, cw2.idx
+    ) AS cw
     GROUP BY cw.checkpoint_id
   `,
 
-    UPSERT_CHECKPOINT_BLOBS_SQL: `INSERT INTO ${TABLES.checkpoint_blobs} (thread_id, checkpoint_ns, channel, version, type, blob)
+    UPSERT_CHECKPOINT_BLOBS_SQL: `INSERT INTO ${TABLES.checkpoint_blobs} (thread_id, checkpoint_ns, channel, version, type, \`blob\`)
   VALUES (?, ?, ?, ?, ?, ?)
   ON DUPLICATE KEY UPDATE type = type
   `,
@@ -114,15 +120,15 @@ export const getSQLStatements = (): SQL_STATEMENTS => {
     metadata = VALUES(metadata)
   `,
 
-    UPSERT_CHECKPOINT_WRITES_SQL: `INSERT INTO ${TABLES.checkpoint_writes} (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
+    UPSERT_CHECKPOINT_WRITES_SQL: `INSERT INTO ${TABLES.checkpoint_writes} (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, \`blob\`)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   ON DUPLICATE KEY UPDATE
     channel = VALUES(channel),
     type = VALUES(type),
-    blob = VALUES(blob)
+    \`blob\` = VALUES(\`blob\`)
   `,
 
-    INSERT_CHECKPOINT_WRITES_SQL: `INSERT IGNORE INTO ${TABLES.checkpoint_writes} (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
+    INSERT_CHECKPOINT_WRITES_SQL: `INSERT IGNORE INTO ${TABLES.checkpoint_writes} (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, \`blob\`)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `,
 
