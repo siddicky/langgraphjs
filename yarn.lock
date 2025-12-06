@@ -1771,7 +1771,9 @@ __metadata:
   resolution: "@langchain/langgraph-checkpoint-mysql@workspace:libs/checkpoint-mysql"
   dependencies:
     "@langchain/langgraph-checkpoint": "workspace:*"
+    "@langchain/langgraph-checkpoint-validation": "workspace:*"
     "@langchain/scripts": "npm:>=0.1.2 <0.2.0"
+    "@testcontainers/mysql": "npm:^10.0.0"
     "@tsconfig/recommended": "npm:^1.0.3"
     "@types/uuid": "npm:^10"
     "@typescript-eslint/eslint-plugin": "npm:^6.12.0"
@@ -1890,7 +1892,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@langchain/langgraph-checkpoint-validation@workspace:libs/checkpoint-validation":
+"@langchain/langgraph-checkpoint-validation@workspace:*, @langchain/langgraph-checkpoint-validation@workspace:libs/checkpoint-validation":
   version: 0.0.0-use.local
   resolution: "@langchain/langgraph-checkpoint-validation@workspace:libs/checkpoint-validation"
   dependencies:
@@ -3764,6 +3766,15 @@ __metadata:
   dependencies:
     testcontainers: "npm:^11.0.3"
   checksum: 10/2803bb47eec2a82021cad4a1578929c4975cf7e6bbba943566d1f209f9e7dc84ae7fdee51bf634f28a321ffbee224cefd655327856fd3ad5e397894bb59cfd21
+  languageName: node
+  linkType: hard
+
+"@testcontainers/mysql@npm:^10.0.0":
+  version: 10.28.0
+  resolution: "@testcontainers/mysql@npm:10.28.0"
+  dependencies:
+    testcontainers: "npm:^10.28.0"
+  checksum: 10/071435aa77dc258e1cc91d1a4afc4d480ebfa18f36de01d1981fdbbdf39538caba2a71bb5698087d14befa5654208daa9de45015825b5d562d52f31a33b56737
   languageName: node
   linkType: hard
 
@@ -13688,7 +13699,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"testcontainers@npm:^10.0.0":
+"testcontainers@npm:^10.0.0, testcontainers@npm:^10.28.0":
   version: 10.28.0
   resolution: "testcontainers@npm:10.28.0"
   dependencies:
