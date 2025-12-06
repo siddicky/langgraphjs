@@ -30,6 +30,11 @@ export const initializer: CheckpointerTestInitializer<MysqlSaver> = {
   },
 
   async createCheckpointer() {
+    // Close existing connection if any
+    if (connection) {
+      await connection.end();
+    }
+
     connection = await mysql.createConnection({
       host: startedContainer.getHost(),
       port: startedContainer.getPort(),
@@ -52,6 +57,7 @@ export const initializer: CheckpointerTestInitializer<MysqlSaver> = {
     if (connection) {
       await connection.query(`DROP DATABASE IF EXISTS \`${dbName}\``);
       await connection.end();
+      connection = undefined;
     }
   },
 };
