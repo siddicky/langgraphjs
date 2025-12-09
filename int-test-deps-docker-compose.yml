@@ -16,3 +16,17 @@ services:
       POSTGRES_LOG_MIN_MESSAGES: "info" # Logs messages of level INFO and above
     ports:
       - "5434:5432"
+
+  mysql:
+    image: mysql:8.0
+    container_name: langgraphjs-mysql-test
+    volumes:
+      - ./tmp/integration_tests/mysql:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: testdb
+    ports:
+      - "3307:3306"
+    command: --default-authentication-plugin=mysql_native_password
