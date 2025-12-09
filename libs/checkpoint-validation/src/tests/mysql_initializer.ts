@@ -19,6 +19,10 @@ const container = new MySqlContainer("mysql:8.0")
 let startedContainer: StartedMySqlContainer;
 let client: mysql.Connection | undefined;
 
+function getConnectionString(): string {
+  return `mysql://${startedContainer.getUsername()}:${startedContainer.getUserPassword()}@${startedContainer.getHost()}:${startedContainer.getPort()}/${dbName}`;
+}
+
 export const initializer: CheckpointerTestInitializer<MysqlSaver> = {
   checkpointerName: "@langchain/langgraph-checkpoint-mysql",
 
@@ -34,7 +38,7 @@ export const initializer: CheckpointerTestInitializer<MysqlSaver> = {
   },
 
   async createCheckpointer() {
-    const connectionString = `mysql://${startedContainer.getUsername()}:${startedContainer.getUserPassword()}@${startedContainer.getHost()}:${startedContainer.getPort()}/${dbName}`;
+    const connectionString = getConnectionString();
 
     const checkpointer = MysqlSaver.fromConnString(connectionString);
     await checkpointer.setup();
@@ -43,9 +47,7 @@ export const initializer: CheckpointerTestInitializer<MysqlSaver> = {
 
   async destroyCheckpointer(checkpointer: MysqlSaver) {
     // Clean up tables
-    client = await mysql.createConnection(
-      `mysql://${startedContainer.getUsername()}:${startedContainer.getUserPassword()}@${startedContainer.getHost()}:${startedContainer.getPort()}/${dbName}`
-    );
+    client = await mysql.createConnection(getConnectionString());
 
     await client?.query("DROP TABLE IF EXISTS checkpoint_writes");
     await client?.query("DROP TABLE IF EXISTS checkpoint_blobs");
