@@ -24,6 +24,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:int": "vitest run --mode int",
+    "test:validation": "vitest run src/tests/validation.test.ts",
     "format": "prettier --config .prettierrc --write \"src\"",
     "format:check": "prettier --config .prettierrc --check \"src\""
   },
@@ -38,7 +39,9 @@
   },
   "devDependencies": {
     "@langchain/langgraph-checkpoint": "workspace:*",
+    "@langchain/langgraph-checkpoint-validation": "workspace:*",
     "@langchain/scripts": ">=0.1.2 <0.2.0",
+    "@testcontainers/mysql": "^10.0.0",
     "@tsconfig/recommended": "^1.0.3",
     "@types/uuid": "^10",
     "@typescript-eslint/eslint-plugin": "^6.12.0",
