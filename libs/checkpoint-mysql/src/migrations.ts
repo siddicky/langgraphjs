@@ -43,4 +43,3 @@ export const getMigrations = () => {
     `ALTER TABLE ${TABLES.checkpoint_blobs} MODIFY COLUMN \`blob\` LONGBLOB NULL`,
   ];
 };
-
