@@ -16,6 +16,7 @@ export interface SQL_STATEMENTS {
 
 export type SQL_TYPES = {
   SELECT_SQL: {
+    channel_values: [Buffer, Buffer, Buffer][];
     checkpoint: Omit<Checkpoint, "pending_sends" | "channel_values">;
     parent_checkpoint_id: string | null;
     thread_id: string;
@@ -36,7 +37,8 @@ export type SQL_TYPES = {
   };
   SELECT_PENDING_SENDS_SQL: {
     checkpoint_id: string;
-    pending_sends: [Buffer, Buffer][];
+    type: string;
+    blob: Buffer;
   };
   UPSERT_CHECKPOINT_BLOBS_SQL: unknown;
   UPSERT_CHECKPOINTS_SQL: unknown;
@@ -86,18 +88,13 @@ export const getSQLStatements = (): SQL_STATEMENTS => {
 
     SELECT_PENDING_SENDS_SQL: `SELECT
       checkpoint_id,
-      JSON_ARRAYAGG(
-        JSON_ARRAY(cw.type, cw.\`blob\`)
-      ) as pending_sends
-    FROM (
-      SELECT checkpoint_id, type, \`blob\`
-      FROM ${TABLES.checkpoint_writes} cw2
-      WHERE cw2.thread_id = ?
-        AND cw2.checkpoint_id IN (?)
-        AND cw2.channel = '${TASKS}'
-      ORDER BY cw2.task_id, cw2.idx
-    ) AS cw
-    GROUP BY cw.checkpoint_id
+      type,
+      \`blob\`
+    FROM ${TABLES.checkpoint_writes}
+    WHERE thread_id = ?
+      AND checkpoint_id IN (?)
+      AND channel = '${TASKS}'
+    ORDER BY checkpoint_id, task_id, idx
   `,
 
     UPSERT_CHECKPOINT_BLOBS_SQL: `INSERT INTO ${TABLES.checkpoint_blobs} (thread_id, checkpoint_ns, channel, version, type, \`blob\`)
