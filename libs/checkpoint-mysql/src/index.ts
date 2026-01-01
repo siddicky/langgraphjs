@@ -156,6 +156,37 @@ export class MysqlSaver extends BaseCheckpointSaver {
     return this.serde.loadsTyped(type, dumpedValue);
   }
 
+  protected async _fetchChannelValues(
+    threadId: string,
+    checkpointNs: string,
+    channelVersions: Record<string, number>,
+    existingChannelValues?: [Buffer, Buffer, Buffer][]
+  ): Promise<[Buffer, Buffer, Buffer][]> {
+    const channelValuesRows: [Buffer, Buffer, Buffer][] = existingChannelValues || [];
+    
+    if (Object.keys(channelVersions).length > 0) {
+      const [cvRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        this.SQL_STATEMENTS.SELECT_CHANNEL_VALUES_SQL,
+        [
+          threadId,
+          checkpointNs,
+          JSON.stringify(channelVersions),
+          JSON.stringify(channelVersions),
+        ]
+      );
+      
+      for (const cvRow of cvRows as SQL_TYPES["SELECT_CHANNEL_VALUES_SQL"][]) {
+        channelValuesRows.push([
+          Buffer.from(cvRow.channel),
+          Buffer.from(cvRow.type),
+          cvRow.blob,
+        ]);
+      }
+    }
+    
+    return channelValuesRows;
+  }
+
   protected async _loadWritesFromRows(
     writes: SQL_TYPES["SELECT_PENDING_WRITES_SQL"][]
   ): Promise<[string, string, unknown][]> {
@@ -349,30 +380,11 @@ export class MysqlSaver extends BaseCheckpointSaver {
     if (row === undefined) return undefined;
 
     // Fetch channel values separately
-    const channelVersions = row.checkpoint.channel_versions || {};
-    const channelValuesRows: [Buffer, Buffer, Buffer][] = [];
-    
-    if (Object.keys(channelVersions).length > 0) {
-      const [cvRows] = await this.pool.query<mysql.RowDataPacket[]>(
-        this.SQL_STATEMENTS.SELECT_CHANNEL_VALUES_SQL,
-        [
-          thread_id,
-          checkpoint_ns,
-          JSON.stringify(channelVersions),
-          JSON.stringify(channelVersions),
-        ]
-      );
-      
-      for (const cvRow of cvRows as SQL_TYPES["SELECT_CHANNEL_VALUES_SQL"][]) {
-        channelValuesRows.push([
-          Buffer.from(cvRow.channel),
-          Buffer.from(cvRow.type),
-          cvRow.blob,
-        ]);
-      }
-    }
-    
-    row.channel_values = channelValuesRows;
+    row.channel_values = await this._fetchChannelValues(
+      thread_id,
+      checkpoint_ns,
+      row.checkpoint.channel_versions || {}
+    );
 
     // Fetch pending writes separately
     const [pendingWritesRows] = await this.pool.query<mysql.RowDataPacket[]>(
@@ -393,9 +405,9 @@ export class MysqlSaver extends BaseCheckpointSaver {
 
       const sendsData = sendsRows as SQL_TYPES["SELECT_PENDING_SENDS_SQL"][];
       if (sendsData.length > 0) {
-        const pendingSends: [Buffer, Buffer][] = sendsData.map((row) => [
-          Buffer.from(row.type),
-          row.blob,
+        const pendingSends: [Buffer, Buffer][] = sendsData.map((sendRow) => [
+          Buffer.from(sendRow.type),
+          sendRow.blob,
         ]);
         await this._migratePendingSends(pendingSends, row);
       }
@@ -508,30 +520,12 @@ export class MysqlSaver extends BaseCheckpointSaver {
 
     for (const value of typedRows) {
       // Fetch channel values for this checkpoint
-      const channelVersions = value.checkpoint.channel_versions || {};
-      const channelValuesRows: [Buffer, Buffer, Buffer][] = value.channel_values || [];
-      
-      if (Object.keys(channelVersions).length > 0) {
-        const [cvRows] = await this.pool.query<mysql.RowDataPacket[]>(
-          this.SQL_STATEMENTS.SELECT_CHANNEL_VALUES_SQL,
-          [
-            value.thread_id,
-            value.checkpoint_ns,
-            JSON.stringify(channelVersions),
-            JSON.stringify(channelVersions),
-          ]
-        );
-        
-        for (const cvRow of cvRows as SQL_TYPES["SELECT_CHANNEL_VALUES_SQL"][]) {
-          channelValuesRows.push([
-            Buffer.from(cvRow.channel),
-            Buffer.from(cvRow.type),
-            cvRow.blob,
-          ]);
-        }
-      }
-      
-      value.channel_values = channelValuesRows;
+      value.channel_values = await this._fetchChannelValues(
+        value.thread_id,
+        value.checkpoint_ns,
+        value.checkpoint.channel_versions || {},
+        value.channel_values
+      );
       
       // Fetch pending writes for this checkpoint
       const [pendingWritesRows] = await this.pool.query<mysql.RowDataPacket[]>(
