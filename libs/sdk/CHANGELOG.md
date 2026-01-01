@@ -1,5 +1,17 @@
 # @langchain/langgraph-sdk
 
+## 1.3.1
+
+### Patch Changes
+
+- 58aa2cf: Adding retry support for stream methods on network issues
+
+## 1.3.0
+
+### Minor Changes
+
+- 1497df9: feat(sdk): add support for enqueuing `useStream().submit(...)` calls while the agent is still running
+
 ## 1.2.0
 
 ### Minor Changes
