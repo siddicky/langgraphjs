@@ -509,7 +509,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
     for (const value of typedRows) {
       // Fetch channel values for this checkpoint
       const channelVersions = value.checkpoint.channel_versions || {};
-      const channelValuesRows: [Buffer, Buffer, Buffer][] = [];
+      const channelValuesRows: [Buffer, Buffer, Buffer][] = value.channel_values || [];
       
       if (Object.keys(channelVersions).length > 0) {
         const [cvRows] = await this.pool.query<mysql.RowDataPacket[]>(
