@@ -103,8 +103,9 @@ export class MysqlSaver extends BaseCheckpointSaver {
         const [rows] = await connection.query<mysql.RowDataPacket[]>(
           "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
         );
-        if (rows.length > 0) {
-          version = rows[0].v;
+        const firstRow = rows[0];
+        if (firstRow !== undefined) {
+          version = firstRow.v;
         }
       } catch (error: unknown) {
         // Assume table doesn't exist if there's an error
@@ -112,7 +113,11 @@ export class MysqlSaver extends BaseCheckpointSaver {
       }
 
       for (let v = version + 1; v < MIGRATIONS.length; v += 1) {
-        await connection.query(MIGRATIONS[v]);
+        const migration = MIGRATIONS[v];
+        if (migration === undefined) {
+          throw new Error(`Migration at version ${v} not found`);
+        }
+        await connection.query(migration);
         await connection.query(
           "INSERT INTO checkpoint_migrations (v) VALUES (?)",
           [v]
@@ -159,11 +164,12 @@ export class MysqlSaver extends BaseCheckpointSaver {
   protected async _fetchChannelValues(
     threadId: string,
     checkpointNs: string,
-    channelVersions: Record<string, number>,
+    channelVersions: ChannelVersions,
     existingChannelValues?: [Buffer, Buffer, Buffer][]
   ): Promise<[Buffer, Buffer, Buffer][]> {
-    const channelValuesRows: [Buffer, Buffer, Buffer][] = existingChannelValues || [];
-    
+    const channelValuesRows: [Buffer, Buffer, Buffer][] =
+      existingChannelValues || [];
+
     if (Object.keys(channelVersions).length > 0) {
       const [cvRows] = await this.pool.query<mysql.RowDataPacket[]>(
         this.SQL_STATEMENTS.SELECT_CHANNEL_VALUES_SQL,
@@ -174,7 +180,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
           JSON.stringify(channelVersions),
         ]
       );
-      
+
       for (const cvRow of cvRows as SQL_TYPES["SELECT_CHANNEL_VALUES_SQL"][]) {
         channelValuesRows.push([
           Buffer.from(cvRow.channel),
@@ -183,7 +189,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
         ]);
       }
     }
-    
+
     return channelValuesRows;
   }
 
@@ -236,20 +242,22 @@ export class MysqlSaver extends BaseCheckpointSaver {
     }
 
     return Promise.all(
-      Object.entries(versions).map(async ([k, ver]) => {
-        const [type, value] =
-          k in values
-            ? await this.serde.dumpsTyped(values[k])
-            : ["empty", null];
-        return [
-          threadId,
-          checkpointNs,
-          k,
-          ver.toString(),
-          type,
-          value ? Buffer.from(value) : undefined,
-        ];
-      })
+      (Object.entries(versions) as [string, string | number][]).map(
+        async ([k, ver]) => {
+          const [type, value] =
+            k in values
+              ? await this.serde.dumpsTyped(values[k])
+              : ["empty", null];
+          return [
+            threadId,
+            checkpointNs,
+            k,
+            ver.toString(),
+            type,
+            value ? Buffer.from(value) : undefined,
+          ];
+        }
+      )
     );
   }
 
@@ -477,24 +485,23 @@ export class MysqlSaver extends BaseCheckpointSaver {
       (row) => row.checkpoint.v < 4 && row.parent_checkpoint_id != null
     );
 
-    if (toMigrate.length > 0) {
+    const firstToMigrate = toMigrate[0];
+    if (firstToMigrate !== undefined) {
       const [sendsRows] = await this.pool.query<mysql.RowDataPacket[]>(
         this.SQL_STATEMENTS.SELECT_PENDING_SENDS_SQL,
         [
-          toMigrate[0].thread_id,
+          firstToMigrate.thread_id,
           toMigrate.map((row) => row.parent_checkpoint_id),
         ]
       );
 
       const sendsData = sendsRows as SQL_TYPES["SELECT_PENDING_SENDS_SQL"][];
-      
+
       // Group by checkpoint_id
       const sendsByCheckpointId: Record<string, [Buffer, Buffer][]> = {};
       for (const sendRow of sendsData) {
-        if (!sendsByCheckpointId[sendRow.checkpoint_id]) {
-          sendsByCheckpointId[sendRow.checkpoint_id] = [];
-        }
-        sendsByCheckpointId[sendRow.checkpoint_id].push([
+        sendsByCheckpointId[sendRow.checkpoint_id] ??= [];
+        sendsByCheckpointId[sendRow.checkpoint_id]!.push([
           Buffer.from(sendRow.type),
           sendRow.blob,
         ]);
@@ -506,12 +513,14 @@ export class MysqlSaver extends BaseCheckpointSaver {
         if (!row.parent_checkpoint_id) return acc;
 
         acc[row.parent_checkpoint_id] ??= [];
-        acc[row.parent_checkpoint_id].push(row);
+        acc[row.parent_checkpoint_id]!.push(row);
         return acc;
       }, {});
 
       // add to values
-      for (const [checkpointId, pendingSends] of Object.entries(sendsByCheckpointId)) {
+      for (const [checkpointId, pendingSends] of Object.entries(
+        sendsByCheckpointId
+      )) {
         for (const row of parentMap[checkpointId] || []) {
           await this._migratePendingSends(pendingSends, row);
         }
@@ -526,7 +535,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
         value.checkpoint.channel_versions || {},
         value.channel_values
       );
-      
+
       // Fetch pending writes for this checkpoint
       const [pendingWritesRows] = await this.pool.query<mysql.RowDataPacket[]>(
         this.SQL_STATEMENTS.SELECT_PENDING_WRITES_SQL,
