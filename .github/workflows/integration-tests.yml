@@ -1,0 +1,143 @@
+# This workflow runs integration tests for checkpointer implementations
+name: Integration Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    paths:
+      - "libs/checkpoint-*/**"
+      - ".github/workflows/integration-tests.yml"
+      - "int-test-deps-docker-compose.yml"
+  workflow_dispatch: # Allows triggering the workflow manually in GitHub UI
+
+# If another push to the same PR or branch happens while this workflow is still running,
+# cancel the earlier run in favor of the next run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22.4.1"
+
+jobs:
+  mysql-checkpointer-tests:
+    name: MySQL Checkpointer Integration Tests
+    runs-on: ubuntu-latest
+    env:
+      TEST_MYSQL_URL: mysql://user:password@localhost:3307/testdb
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_USER: user
+          MYSQL_PASSWORD: password
+          MYSQL_DATABASE: testdb
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Run MySQL integration tests
+        run: yarn workspace @langchain/langgraph-checkpoint-mysql test:int
+        env:
+          TEST_MYSQL_URL: mysql://user:password@127.0.0.1:3307/testdb
+
+  postgres-checkpointer-tests:
+    name: Postgres Checkpointer Integration Tests
+    runs-on: ubuntu-latest
+    env:
+      TEST_POSTGRES_URL: postgresql://user:password@localhost:5434/testdb
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: testdb
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd="pg_isready -U user"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Run Postgres integration tests
+        run: yarn workspace @langchain/langgraph-checkpoint-postgres test:int
+        env:
+          TEST_POSTGRES_URL: postgresql://user:password@127.0.0.1:5434/testdb
+
+  validation-tests:
+    name: Checkpoint Validation Tests
+    runs-on: ubuntu-latest
+    # Skip on Windows and macOS as TestContainers has limitations
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Run validation tests (excluding container-based tests)
+        run: yarn workspace @langchain/langgraph-checkpoint-validation test
+        env:
+          CI: "true"
+
+  all-integration-tests:
+    name: All Integration Tests Summary
+    needs: [mysql-checkpointer-tests, postgres-checkpointer-tests, validation-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [[ "${{ needs.mysql-checkpointer-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.postgres-checkpointer-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.validation-tests.result }}" != "success" ]]; then
+            echo "One or more integration test jobs failed"
+            exit 1
+          fi
+          echo "All integration tests passed successfully"

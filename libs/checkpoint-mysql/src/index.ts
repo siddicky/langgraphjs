@@ -15,7 +15,11 @@ import {
 import mysql from "mysql2/promise";
 
 import { getMigrations } from "./migrations.js";
-import { type SQL_STATEMENTS, type SQL_TYPES, getSQLStatements } from "./sql.js";
+import {
+  type SQL_STATEMENTS,
+  type SQL_TYPES,
+  getSQLStatements,
+} from "./sql.js";
 
 /**
  * LangGraph checkpointer that uses a MySQL instance as the backing store.
@@ -316,15 +320,17 @@ export class MysqlSaver extends BaseCheckpointSaver {
   // eslint-disable-next-line @typescript-eslint/naming-convention, camelcase
   async getTuple(config: RunnableConfig): Promise<CheckpointTuple | undefined> {
     // eslint-disable-next-line @typescript-eslint/naming-convention
-    const { thread_id, checkpoint_ns = "", checkpoint_id } =
-      config.configurable ?? {};
+    const {
+      thread_id,
+      checkpoint_ns = "",
+      checkpoint_id,
+    } = config.configurable ?? {};
 
     let args: unknown[];
     let where: string;
     // eslint-disable-next-line @typescript-eslint/naming-convention
     if (checkpoint_id) {
-      where =
-        "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?";
+      where = "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?";
       // eslint-disable-next-line @typescript-eslint/naming-convention
       args = [thread_id, checkpoint_ns, checkpoint_id];
     } else {
@@ -348,7 +354,8 @@ export class MysqlSaver extends BaseCheckpointSaver {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       [thread_id, checkpoint_ns, row.checkpoint_id]
     );
-    const pendingWritesData = pendingWritesRows as SQL_TYPES["SELECT_PENDING_WRITES_SQL"][];
+    const pendingWritesData =
+      pendingWritesRows as SQL_TYPES["SELECT_PENDING_WRITES_SQL"][];
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     if (row.checkpoint.v < 4 && row.parent_checkpoint_id != null) {
@@ -433,7 +440,10 @@ export class MysqlSaver extends BaseCheckpointSaver {
     if (toMigrate.length > 0) {
       const [sendsRows] = await this.pool.query<mysql.RowDataPacket[]>(
         this.SQL_STATEMENTS.SELECT_PENDING_SENDS_SQL,
-        [toMigrate[0].thread_id, toMigrate.map((row) => row.parent_checkpoint_id)]
+        [
+          toMigrate[0].thread_id,
+          toMigrate.map((row) => row.parent_checkpoint_id),
+        ]
       );
 
       const parentMap = toMigrate.reduce<
@@ -460,7 +470,8 @@ export class MysqlSaver extends BaseCheckpointSaver {
         this.SQL_STATEMENTS.SELECT_PENDING_WRITES_SQL,
         [value.thread_id, value.checkpoint_ns, value.checkpoint_id]
       );
-      const pendingWritesData = pendingWritesRows as SQL_TYPES["SELECT_PENDING_WRITES_SQL"][];
+      const pendingWritesData =
+        pendingWritesRows as SQL_TYPES["SELECT_PENDING_WRITES_SQL"][];
 
       yield {
         config: {
@@ -546,8 +557,11 @@ export class MysqlSaver extends BaseCheckpointSaver {
       throw new Error(`Missing "configurable" field in "config" param`);
     }
     // eslint-disable-next-line @typescript-eslint/naming-convention
-    const { thread_id, checkpoint_ns = "", checkpoint_id } =
-      config.configurable;
+    const {
+      thread_id,
+      checkpoint_ns = "",
+      checkpoint_id,
+    } = config.configurable;
 
     const nextConfig = {
       configurable: {
