@@ -3,6 +3,7 @@ import { type Checkpoint, TASKS } from "@langchain/langgraph-checkpoint";
 export interface SQL_STATEMENTS {
   SELECT_SQL: string;
   SELECT_CHANNEL_VALUES_SQL: string;
+  SELECT_BATCH_CHANNEL_VALUES_SQL: string;
   SELECT_PENDING_WRITES_SQL: string;
   SELECT_PENDING_SENDS_SQL: string;
   UPSERT_CHECKPOINT_BLOBS_SQL: string;
@@ -25,6 +26,14 @@ export type SQL_TYPES = {
     metadata: Record<string, unknown>;
   };
   SELECT_CHANNEL_VALUES_SQL: {
+    channel: string;
+    type: string;
+    blob: Buffer;
+  };
+  SELECT_BATCH_CHANNEL_VALUES_SQL: {
+    thread_id: string;
+    checkpoint_ns: string;
+    checkpoint_id: string;
     channel: string;
     type: string;
     blob: Buffer;
@@ -80,6 +89,21 @@ export const getSQLStatements = (): SQL_STATEMENTS => {
       WHERE thread_id = ? AND checkpoint_ns = ?
         AND JSON_CONTAINS(JSON_KEYS(?), JSON_QUOTE(channel))
         AND version = JSON_UNQUOTE(JSON_EXTRACT(?, CONCAT('$.', channel)))`,
+
+    SELECT_BATCH_CHANNEL_VALUES_SQL: `SELECT
+        cp.thread_id,
+        cp.checkpoint_ns,
+        cp.checkpoint_id,
+        cb.channel,
+        cb.type,
+        cb.\`blob\`
+      FROM ${TABLES.checkpoints} cp
+      INNER JOIN ${TABLES.checkpoint_blobs} cb
+        ON cb.thread_id = cp.thread_id
+        AND cb.checkpoint_ns = cp.checkpoint_ns
+        AND JSON_CONTAINS(JSON_KEYS(cp.checkpoint->'$.channel_versions'), JSON_QUOTE(cb.channel))
+        AND cb.version = JSON_UNQUOTE(JSON_EXTRACT(cp.checkpoint, CONCAT('$.channel_versions.', cb.channel)))
+      WHERE cp.checkpoint_id IN (?)`,
 
     SELECT_PENDING_WRITES_SQL: `SELECT task_id, channel, type, \`blob\`
       FROM ${TABLES.checkpoint_writes}

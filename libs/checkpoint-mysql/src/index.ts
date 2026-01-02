@@ -113,11 +113,7 @@ export class MysqlSaver extends BaseCheckpointSaver {
       }
 
       for (let v = version + 1; v < MIGRATIONS.length; v += 1) {
-        const migration = MIGRATIONS[v];
-        if (migration === undefined) {
-          throw new Error(`Migration at version ${v} not found`);
-        }
-        await connection.query(migration);
+        await connection.query(MIGRATIONS[v]);
         await connection.query(
           "INSERT INTO checkpoint_migrations (v) VALUES (?)",
           [v]
@@ -191,6 +187,50 @@ export class MysqlSaver extends BaseCheckpointSaver {
     }
 
     return channelValuesRows;
+  }
+
+  /**
+   * Batch fetch channel values for multiple checkpoints in a single query.
+   * This avoids the N+1 query problem when listing checkpoints.
+   * @internal
+   */
+  protected async _batchFetchChannelValues(
+    checkpoints: SQL_TYPES["SELECT_SQL"][]
+  ): Promise<Map<string, [Buffer, Buffer, Buffer][]>> {
+    const result = new Map<string, [Buffer, Buffer, Buffer][]>();
+
+    // Filter to checkpoints that have channel versions
+    const checkpointsWithChannels = checkpoints.filter(
+      (cp) =>
+        cp.checkpoint.channel_versions &&
+        Object.keys(cp.checkpoint.channel_versions).length > 0
+    );
+
+    if (checkpointsWithChannels.length === 0) {
+      return result;
+    }
+
+    const checkpointIds = checkpointsWithChannels.map((cp) => cp.checkpoint_id);
+
+    const [cvRows] = await this.pool.query<mysql.RowDataPacket[]>(
+      this.SQL_STATEMENTS.SELECT_BATCH_CHANNEL_VALUES_SQL,
+      [checkpointIds]
+    );
+
+    // Group results by checkpoint_id
+    for (const cvRow of cvRows as SQL_TYPES["SELECT_BATCH_CHANNEL_VALUES_SQL"][]) {
+      const key = cvRow.checkpoint_id;
+      if (!result.has(key)) {
+        result.set(key, []);
+      }
+      result.get(key)!.push([
+        Buffer.from(cvRow.channel),
+        Buffer.from(cvRow.type),
+        cvRow.blob,
+      ]);
+    }
+
+    return result;
   }
 
   protected async _loadWritesFromRows(
@@ -527,14 +567,16 @@ export class MysqlSaver extends BaseCheckpointSaver {
       }
     }
 
+    // Batch fetch channel values for all checkpoints in a single query
+    const batchChannelValues = await this._batchFetchChannelValues(typedRows);
+
     for (const value of typedRows) {
-      // Fetch channel values for this checkpoint
-      value.channel_values = await this._fetchChannelValues(
-        value.thread_id,
-        value.checkpoint_ns,
-        value.checkpoint.channel_versions || {},
-        value.channel_values
-      );
+      // Get channel values from batch result, merging with any existing values from migration
+      const fetchedChannelValues =
+        batchChannelValues.get(value.checkpoint_id) || [];
+      value.channel_values = value.channel_values
+        ? [...value.channel_values, ...fetchedChannelValues]
+        : fetchedChannelValues;
 
       // Fetch pending writes for this checkpoint
       const [pendingWritesRows] = await this.pool.query<mysql.RowDataPacket[]>(
