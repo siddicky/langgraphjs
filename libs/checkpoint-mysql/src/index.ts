@@ -696,6 +696,13 @@ export class MysqlSaver extends BaseCheckpointSaver {
     writes: PendingWrite[],
     taskId: string
   ): Promise<void> {
+    if (!config.configurable?.thread_id) {
+      throw new Error("Missing thread_id in config.configurable");
+    }
+    if (!config.configurable?.checkpoint_id) {
+      throw new Error("Missing checkpoint_id in config.configurable");
+    }
+
     const query = writes.every((w) => w[0] in WRITES_IDX_MAP)
       ? this.SQL_STATEMENTS.UPSERT_CHECKPOINT_WRITES_SQL
       : this.SQL_STATEMENTS.INSERT_CHECKPOINT_WRITES_SQL;
