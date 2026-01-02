@@ -98,9 +98,9 @@ describe("MysqlSaver", () => {
         "SELECT COUNT(*) as count FROM checkpoint_migrations"
       );
       const MIGRATIONS = getMigrations();
-      expect(Number.parseInt(migrationsResult[0].count, 10)).toBe(
-        MIGRATIONS.length
-      );
+      const firstResult = migrationsResult[0];
+      expect(firstResult).toBeDefined();
+      expect(Number.parseInt(firstResult!.count, 10)).toBe(MIGRATIONS.length);
     } finally {
       await connection.end();
     }
@@ -204,8 +204,10 @@ describe("MysqlSaver", () => {
     expect(checkpointTuples.length).toBe(2);
     const checkpointTuple1 = checkpointTuples[0];
     const checkpointTuple2 = checkpointTuples[1];
-    expect(checkpointTuple1.checkpoint.ts).toBe("2024-04-20T17:19:07.952Z");
-    expect(checkpointTuple2.checkpoint.ts).toBe("2024-04-19T17:19:07.952Z");
+    expect(checkpointTuple1).toBeDefined();
+    expect(checkpointTuple2).toBeDefined();
+    expect(checkpointTuple1!.checkpoint.ts).toBe("2024-04-20T17:19:07.952Z");
+    expect(checkpointTuple2!.checkpoint.ts).toBe("2024-04-19T17:19:07.952Z");
   });
 
   it("should delete thread", async () => {
@@ -301,11 +303,11 @@ describe("MysqlSaver", () => {
       checkpointTuples.push(checkpoint);
     }
     expect(checkpointTuples.length).toBe(2);
-    expect(checkpointTuples[0].checkpoint.channel_values).toEqual({
+    const firstTuple = checkpointTuples[0];
+    expect(firstTuple).toBeDefined();
+    expect(firstTuple!.checkpoint.channel_values).toEqual({
       [TASKS]: ["send-1", "send-2", "send-3"],
     });
-    expect(
-      checkpointTuples[0].checkpoint.channel_versions[TASKS]
-    ).toBeDefined();
+    expect(firstTuple!.checkpoint.channel_versions[TASKS]).toBeDefined();
   });
 });
